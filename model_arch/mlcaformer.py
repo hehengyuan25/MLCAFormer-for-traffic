@@ -26,7 +26,6 @@ class MLCAFormer(nn.Module):
             num_heads=4,
             num_layers=3,
             dropout=0.1,
-            use_mixed_proj=True,
     ):
         super().__init__()
 
@@ -39,6 +38,7 @@ class MLCAFormer(nn.Module):
         self.input_embedding_dim = input_embedding_dim
         self.tod_embedding_dim = tod_embedding_dim
         self.dow_embedding_dim = dow_embedding_dim
+        self.nid_embedding_dim = nid_embedding_dim
         self.col_embedding_dim = col_embedding_dim
         self.model_dim = (
                 input_embedding_dim
@@ -47,10 +47,9 @@ class MLCAFormer(nn.Module):
                 + col_embedding_dim
         )
 
-        self.model_dim1 = self.model_dim + nid_embedding_dim
+        self.model_dim1 = self.model_dim + self.nid_embedding_dim
         self.num_heads = num_heads
         self.num_layers = num_layers
-        self.use_mixed_proj = use_mixed_proj
 
         self.input_proj = nn.Linear(input_dim, input_embedding_dim)
         if tod_embedding_dim > 0:
@@ -62,13 +61,10 @@ class MLCAFormer(nn.Module):
                 nn.Parameter(torch.empty(in_steps, num_nodes, col_embedding_dim))
             )
 
-        if use_mixed_proj:
-            self.output_proj = nn.Linear(
-                in_steps * self.model_dim1, out_steps * output_dim
+      
+        self.output_proj = nn.Linear(
+            in_steps * self.model_dim1, out_steps * output_dim
             )
-        else:
-            self.temporal_proj = nn.Linear(in_steps, out_steps)
-            self.output_proj = nn.Linear(self.model_dim, self.output_dim)
 
         self.spatial_attention_layers = nn.ModuleList(
             [
@@ -87,7 +83,7 @@ class MLCAFormer(nn.Module):
     def forward(self, x):
         batch_size = x.shape[0]
         features = []
-        x_input = self.input_proj(x[..., : self.input_dim])  # Main feature
+        x_input = self.input_proj(x[..., : self.input_dim])  
         features.append(x_input)
         if self.tod_embedding_dim > 0:
             tod = x[..., 1]
@@ -106,7 +102,7 @@ class MLCAFormer(nn.Module):
         for attn in self.temporal_attention_layers:
             x = attn(x, dim=1)
 
-        x = apply_node_position_aware_encoding(x, 24)
+        x = apply_node_position_aware_encoding(x, self.nid_embedding_dim)
         for attn in self.spatial_attention_layers:
             x = attn(x, dim=2)
 
